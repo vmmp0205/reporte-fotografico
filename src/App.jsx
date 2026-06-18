@@ -1,8 +1,3 @@
-bash
-
-cat /home/claude/reporte-fotografico/src/App.jsx
-Salida
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { saveReporte, getAllReportes } from "./db";
 import { useOnlineSync } from "./useOnlineSync";
