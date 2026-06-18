@@ -1,3 +1,8 @@
+bash
+
+cat /home/claude/reporte-fotografico/src/App.jsx
+Salida
+
 import { useState, useRef, useCallback, useEffect } from "react";
 import { saveReporte, getAllReportes } from "./db";
 import { useOnlineSync } from "./useOnlineSync";
@@ -171,19 +176,14 @@ function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
                 <Icon name="camera" size={18} color={color} />
               </div>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8" }}>Foto {index + 1}</span>
-              {/* Drag & Drop */}
-              <button onClick={() => inputRef.current.click()} style={{ background: `${color}20`, border: `1px solid ${color}50`, borderRadius: 7, padding: "5px 10px", cursor: "pointer", color, fontSize: 10, fontWeight: 700, width: "90%" }}>
-                📁 Subir / Arrastrar
-              </button>
-              {/* Simulate */}
-              <button onClick={handleSimulate} style={{ background: "#1E293B", border: "1px solid #334155", borderRadius: 7, padding: "5px 10px", cursor: "pointer", color: "#64748B", fontSize: 10, fontWeight: 600, width: "90%" }}>
-                🎭 Simular foto
+              <button onClick={() => inputRef.current.click()} style={{ background: `${color}20`, border: `1px solid ${color}50`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color, fontSize: 11, fontWeight: 700, width: "90%" }}>
+                📷 Tomar / Subir foto
               </button>
             </>
           )}
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*" onChange={handleInputChange} style={{ display: "none" }} />
+      <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleInputChange} style={{ display: "none" }} />
     </div>
   );
 }
@@ -573,3 +573,5 @@ export default function App() {
     </div>
   );
 }
+
+
