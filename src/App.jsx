@@ -178,7 +178,7 @@ function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
           )}
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleInputChange} style={{ display: "none" }} />
+      <input ref={inputRef} type="file" accept="image/*" onChange={handleInputChange} style={{ display: "none" }} />
     </div>
   );
 }
