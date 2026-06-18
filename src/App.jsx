@@ -98,7 +98,8 @@ function makePlaceholderSVG(etapa, index) {
 
 // ── Photo Slot ────────────────────────────────────────────────────────────────
 function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
-  const inputRef = useRef();
+  const cameraRef = useRef(); 
+  const galleryRef = useRef();
   const [dragging, setDragging] = useState(false);
   const color = ETAPAS.find(e => e.key === etapa)?.color || "#6B7280";
 
@@ -171,14 +172,18 @@ function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
                 <Icon name="camera" size={18} color={color} />
               </div>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8" }}>Foto {index + 1}</span>
-              <button onClick={() => inputRef.current.click()} style={{ background: `${color}20`, border: `1px solid ${color}50`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color, fontSize: 11, fontWeight: 700, width: "90%" }}>
-                📷 Tomar / Subir foto
-              </button>
+            <button onClick={() => cameraRef.current.click()} style={{ background: `${color}20`, border: `1px solid ${color}50`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color, fontSize: 11, fontWeight: 700, width: "90%" }}>
+  📷 Tomar foto
+</button>
+<button onClick={() => galleryRef.current.click()} style={{ background: "#0F172A", border: `1px solid #334155`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color: "#94A3B8", fontSize: 11, fontWeight: 600, width: "90%" }}>
+  🖼️ Subir de galería
+</button>
             </>
           )}
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*" onChange={handleInputChange} style={{ display: "none" }} />
+  <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleInputChange} style={{ display: "none" }} />
+<input ref={galleryRef} type="file" accept="image/*" onChange={handleInputChange} style={{ display: "none" }} />
     </div>
   );
 }
