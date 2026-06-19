@@ -339,14 +339,15 @@ function DriveSync({ form, photos, os, onNuevoReporte }) {
   );
 
   if (syncStatus === "done") return (
-    <div style={{ background: "#10B98120", border: "1px solid #10B98140", borderRadius: 12, padding: 16, textAlign: "center", marginBottom: 20 }}>
-      <div style={{ color: "#10B981", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>✓ {syncMessage}</div>
-      <div style={{ color: "#94A3B8", fontSize: 12 }}>Google Drive → Reportes IMSS → OS-{os.os}</div>
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ background: "#10B98120", border: "1px solid #10B98140", borderRadius: 12, padding: 16, textAlign: "center", marginBottom: 12 }}>
+        <div style={{ color: "#10B981", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>✓ {syncMessage}</div>
+        <div style={{ color: "#94A3B8", fontSize: 12 }}>Google Drive → Reportes IMSS → OS-{os.os}</div>
+      </div>
+      <button onClick={onNuevoReporte} style={{ display: "flex", width: "100%", padding: 15, background: "linear-gradient(135deg,#2563EB,#1D4ED8)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        + Nuevo Reporte
+      </button>
     </div>
-    <button onClick={onNuevoReporte} style={{ display: "flex", width: "100%", padding: 15, background: "linear-gradient(135deg,#2563EB,#1D4ED8)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8 }}>
-      + Nuevo Reporte
-    </button>
-  </div>
   );
 
   return (
