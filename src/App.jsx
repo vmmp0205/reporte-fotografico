@@ -224,7 +224,7 @@ function ProgressBar({ photos }) {
 }
 
 // ── Report View ───────────────────────────────────────────────────────────────
-function ReportView({ form, photos, os, onClose }) {
+function ReportView({ form, photos, os, onClose, onNuevoReporte }) {
   const now = new Date();
   const fecha = now.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const hora = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -288,13 +288,13 @@ function ReportView({ form, photos, os, onClose }) {
           );
         })}
 
-   <DriveSync form={form} photos={photos} os={os} />
+   <DriveSync form={form} photos={photos} os={os} onNuevoReporte={onNuevoReporte} />
       </div>
     </div>
   );
 }
 
-function DriveSync({ form, photos, os }) {
+function DriveSync({ form, photos, os, onNuevoReporte }) {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [syncMessage, setSyncMessage] = useState("");
   const [syncPercent, setSyncPercent] = useState(0);
@@ -343,6 +343,10 @@ function DriveSync({ form, photos, os }) {
       <div style={{ color: "#10B981", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>✓ {syncMessage}</div>
       <div style={{ color: "#94A3B8", fontSize: 12 }}>Google Drive → Reportes IMSS → OS-{os.os}</div>
     </div>
+    <button onClick={onNuevoReporte} style={{ display: "flex", width: "100%", padding: 15, background: "linear-gradient(135deg,#2563EB,#1D4ED8)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      + Nuevo Reporte
+    </button>
+  </div>
   );
 
   return (
@@ -389,6 +393,14 @@ export default function App() {
     });
   };
 
+  const handleNuevoReporte = () => {
+    setStep("form");
+    setForm(f => ({ ...f, os: "", tipo: "" }));
+    setPhotos({ antes: [null, null], durante: [null, null], final: [null, null] });
+    setOsSearch("");
+    setActiveEtapa("antes");
+  };
+  
   const formValid = form.ingeniero.trim() && form.os && form.tipo;
 
   // ── STYLES ──────────────────────────────────────────────────────────────────
@@ -413,7 +425,7 @@ export default function App() {
   if (step === "preview") {
     return (
       <div style={S.root}>
-        <ReportView form={form} photos={photos} os={selectedOS} onClose={() => setStep("fotos")} />
+        <ReportView form={form} photos={photos} os={selectedOS} onClose={() => setStep("fotos")} onNuevoReporte={handleNuevoReporte} />
       </div>
     );
   }
