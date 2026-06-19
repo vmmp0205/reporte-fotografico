@@ -288,12 +288,67 @@ function ReportView({ form, photos, os, onClose }) {
           );
         })}
 
-        {/* Status footer */}
-        <div style={{ background: "#10B98120", border: "1px solid #10B98140", borderRadius: 12, padding: 16, textAlign: "center" }}>
-          <div style={{ color: "#10B981", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>✓ Reporte completado</div>
-          <div style={{ color: "#94A3B8", fontSize: 12 }}>Listo para sincronizar con Google Drive</div>
-        </div>
+   <DriveSync form={form} photos={photos} os={os} />
       </div>
+    </div>
+  );
+}
+
+function DriveSync({ form, photos, os }) {
+  const [syncStatus, setSyncStatus] = useState("idle");
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncPercent, setSyncPercent] = useState(0);
+
+  const handleSync = async () => {
+    try {
+      setSyncStatus("syncing");
+      setSyncMessage("Conectando con Google...");
+      setSyncPercent(0);
+      const { initGoogleAuth, requestAccessToken, uploadReporteToDrive } = await import("./googleDrive.js");
+      await initGoogleAuth();
+      const auth = await requestAccessToken();
+      if (!auth.success) throw new Error("No se pudo autenticar con Google");
+      setSyncMessage("Autenticado. Subiendo fotos...");
+      await uploadReporteToDrive(
+        { os, ingeniero: form.ingeniero, tipo: form.tipo, photos },
+        ({ message, percent }) => { setSyncMessage(message); if (percent) setSyncPercent(percent); }
+      );
+      setSyncStatus("done");
+      setSyncMessage("¡Fotos subidas a Google Drive!");
+    } catch (err) {
+      setSyncStatus("error");
+      setSyncMessage("Error: " + err.message);
+    }
+  };
+
+  if (syncStatus === "idle") return (
+    <button onClick={handleSync} style={{ display: "flex", width: "100%", padding: 15, background: "linear-gradient(135deg,#1a73e8,#1557b0)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+      Subir a Google Drive
+    </button>
+  );
+
+  if (syncStatus === "syncing") return (
+    <div style={{ background: "#1E3A5F30", border: "1px solid #2563EB40", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+      <div style={{ color: "#60A5FA", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{syncMessage}</div>
+      <div style={{ background: "#1E293B", borderRadius: 8, height: 6, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${syncPercent}%`, background: "linear-gradient(90deg,#3B82F6,#6366F1)", borderRadius: 8, transition: "width 0.3s" }} />
+      </div>
+      <div style={{ color: "#475569", fontSize: 11, marginTop: 6, textAlign: "right" }}>{syncPercent}%</div>
+    </div>
+  );
+
+  if (syncStatus === "done") return (
+    <div style={{ background: "#10B98120", border: "1px solid #10B98140", borderRadius: 12, padding: 16, textAlign: "center", marginBottom: 20 }}>
+      <div style={{ color: "#10B981", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>✓ {syncMessage}</div>
+      <div style={{ color: "#94A3B8", fontSize: 12 }}>Google Drive → Reportes IMSS → OS-{os.os}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+      <div style={{ color: "#EF4444", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{syncMessage}</div>
+      <button onClick={() => setSyncStatus("idle")} style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 8, padding: "6px 12px", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>Reintentar</button>
     </div>
   );
 }
