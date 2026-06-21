@@ -96,17 +96,45 @@ function makePlaceholderSVG(etapa, index) {
   return "data:image/svg+xml;base64," + btoa(svg);
 }
 
+// ── Comprimir imagen (reduce tamaño manteniendo buena calidad visual) ─────────
+function compressImage(dataUrl, maxWidth = 1600, quality = 0.75) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl); // si falla, usar original
+    img.src = dataUrl;
+  });
+}
+
 // ── Photo Slot ────────────────────────────────────────────────────────────────
 function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
-  const cameraRef = useRef(); 
+  const cameraRef = useRef();
   const galleryRef = useRef();
   const [dragging, setDragging] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const color = ETAPAS.find(e => e.key === etapa)?.color || "#6B7280";
 
   const handleFile = (file) => {
     if (!file || !file.type.startsWith("image/")) return;
+    setProcessing(true);
     const reader = new FileReader();
-    reader.onload = (ev) => onCapture(ev.target.result, file.name);
+    reader.onload = async (ev) => {
+      const compressed = await compressImage(ev.target.result);
+      setProcessing(false);
+      onCapture(compressed, file.name);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -157,6 +185,12 @@ function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
             <Icon name="check" size={13} color="#fff" />
           </div>
         </>
+      ) : processing ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 22, height: 22, border: `2.5px solid ${color}40`, borderTopColor: color, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8" }}>Procesando...</span>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 12, width: "100%" }}>
           {dragging ? (
@@ -172,18 +206,18 @@ function PhotoSlot({ index, etapa, photo, onCapture, onRemove }) {
                 <Icon name="camera" size={18} color={color} />
               </div>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8" }}>Foto {index + 1}</span>
-            <button onClick={() => cameraRef.current.click()} style={{ background: `${color}20`, border: `1px solid ${color}50`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color, fontSize: 11, fontWeight: 700, width: "90%" }}>
-  📷 Tomar foto
-</button>
-<button onClick={() => galleryRef.current.click()} style={{ background: "#0F172A", border: `1px solid #334155`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color: "#94A3B8", fontSize: 11, fontWeight: 600, width: "90%" }}>
-  🖼️ Subir de galería
-</button>
+              <button onClick={() => cameraRef.current.click()} style={{ background: `${color}20`, border: `1px solid ${color}50`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color, fontSize: 11, fontWeight: 700, width: "90%" }}>
+                📷 Tomar foto
+              </button>
+              <button onClick={() => galleryRef.current.click()} style={{ background: "#0F172A", border: `1px solid #334155`, borderRadius: 7, padding: "7px 10px", cursor: "pointer", color: "#94A3B8", fontSize: 11, fontWeight: 600, width: "90%" }}>
+                🖼️ Subir de galería
+              </button>
             </>
           )}
         </div>
       )}
-  <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleInputChange} style={{ display: "none" }} />
-<input ref={galleryRef} type="file" accept="image/*" onChange={handleInputChange} style={{ display: "none" }} />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleInputChange} style={{ display: "none" }} />
+      <input ref={galleryRef} type="file" accept="image/*" onChange={handleInputChange} style={{ display: "none" }} />
     </div>
   );
 }
@@ -253,12 +287,14 @@ function ReportView({ form, photos, os, onClose, onNuevoReporte }) {
               ["Ingeniero", form.ingeniero],
               ["Tipo", form.tipo],
               ["O.S.", os.os],
+              ["Unidad Médica", os.unidadMedica],
               ["Área", os.area],
               ["Equipo", os.equipo],
-              ["Marca/Modelo", `${os.marca} ${os.modelo}`],
+              ["Marca/Modelo", `${os.marca || ""} ${os.modelo || ""}`.trim()],
               ["N° Serie", os.serie],
-            ].map(([label, val]) => (
-              <div key={label} style={{ gridColumn: label === "Equipo" || label === "Marca/Modelo" ? "1 / -1" : undefined }}>
+              ["Inventario", os.inventario],
+            ].filter(([, val]) => val).map(([label, val]) => (
+              <div key={label} style={{ gridColumn: ["Equipo", "Marca/Modelo", "Unidad Médica"].includes(label) ? "1 / -1" : undefined }}>
                 <div style={{ color: "#475569", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 2 }}>{label.toUpperCase()}</div>
                 <div style={{ color: "#F1F5F9", fontSize: 13, fontWeight: 600 }}>{val || "—"}</div>
               </div>
@@ -288,7 +324,8 @@ function ReportView({ form, photos, os, onClose, onNuevoReporte }) {
           );
         })}
 
-   <DriveSync form={form} photos={photos} os={os} onNuevoReporte={onNuevoReporte} />
+        {/* Google Drive Sync Button */}
+        <DriveSync form={form} photos={photos} os={os} onNuevoReporte={onNuevoReporte} />
       </div>
     </div>
   );
@@ -367,16 +404,32 @@ export default function App() {
   const [showOsList, setShowOsList] = useState(false);
   const [activeEtapa, setActiveEtapa] = useState("antes");
   const [isOffline] = useState(!navigator.onLine);
+  const [ordenesManuales, setOrdenesManuales] = useState([]);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualForm, setManualForm] = useState({ os: "", unidadMedica: "", area: "", equipo: "", marca: "", modelo: "", serie: "", inventario: "" });
 
-  const selectedOS = ORDENES.find(o => o.os === form.os);
+  const todasLasOrdenes = [...ordenesManuales, ...ORDENES];
+  const selectedOS = todasLasOrdenes.find(o => o.os === form.os);
   const totalPhotos = Object.values(photos).flat().filter(Boolean).length;
   const allDone = totalPhotos === 6;
 
-  const filteredOS = ORDENES.filter(o =>
+  const filteredOS = todasLasOrdenes.filter(o =>
     o.os.includes(osSearch) ||
     o.equipo.toLowerCase().includes(osSearch.toLowerCase()) ||
     o.area.toLowerCase().includes(osSearch.toLowerCase())
   );
+
+  const manualFormValid = manualForm.os.trim() && manualForm.unidadMedica.trim() && manualForm.area.trim() && manualForm.equipo.trim();
+
+  const handleGuardarManual = () => {
+    if (!manualFormValid) return;
+    const nuevaOrden = { ...manualForm, manual: true };
+    setOrdenesManuales(prev => [nuevaOrden, ...prev.filter(o => o.os !== nuevaOrden.os)]);
+    setForm(f => ({ ...f, os: nuevaOrden.os }));
+    setShowManualForm(false);
+    setShowOsList(false);
+    setManualForm({ os: "", unidadMedica: "", area: "", equipo: "", marca: "", modelo: "", serie: "", inventario: "" });
+  };
 
   const handleCapture = (etapa, index) => (data, name) => {
     setPhotos(prev => {
@@ -400,8 +453,9 @@ export default function App() {
     setPhotos({ antes: [null, null], durante: [null, null], final: [null, null] });
     setOsSearch("");
     setActiveEtapa("antes");
+    setShowManualForm(false);
   };
-  
+
   const formValid = form.ingeniero.trim() && form.os && form.tipo;
 
   // ── STYLES ──────────────────────────────────────────────────────────────────
@@ -409,7 +463,7 @@ export default function App() {
     root: { background: "#0A0F1E", minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif", color: "#F1F5F9", maxWidth: 430, margin: "0 auto" },
     header: { background: "linear-gradient(135deg, #0F2850 0%, #0A1628 100%)", padding: "20px 20px 28px", borderBottom: "1px solid #1E3A5F" },
     title: { fontSize: 22, fontWeight: 800, color: "#F1F5F9", margin: 0, letterSpacing: "-0.02em" },
-    subtitle: { fontSize: 12, color: "#60A5FA", fontWeight: 600, letterSpacing: "0.1em", marginBottom: 6 },
+    subtitle: { fontSize: 11, color: "#60A5FA", fontWeight: 600, letterSpacing: "0.08em" },
     section: { padding: "20px 16px" },
     label: { display: "block", color: "#94A3B8", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 6 },
     input: { width: "100%", background: "#1E293B", border: "1.5px solid #334155", borderRadius: 10, padding: "12px 14px", color: "#F1F5F9", fontSize: 15, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" },
@@ -443,7 +497,10 @@ export default function App() {
               <span style={{ color: "#F59E0B", fontSize: 12, fontWeight: 600 }}>Modo sin conexión · Las fotos se sincronizarán al conectarte</span>
             </div>
           )}
-          <div style={S.subtitle}>IMSS · UMAE PUEBLA</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <img src="/logo.png" alt="Logo" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "contain", background: "#fff" }} />
+            <div style={S.subtitle}>TECNOLOGÍA INDUSTRIAL CIENTÍFICA</div>
+          </div>
           <h1 style={S.title}>Reporte Fotográfico</h1>
           <p style={{ color: "#475569", fontSize: 13, margin: "6px 0 0" }}>Mantenimiento preventivo y correctivo</p>
         </div>
@@ -481,7 +538,7 @@ export default function App() {
               )}
             </div>
             {showOsList && !form.os && (
-              <div style={{ background: "#1E293B", border: "1.5px solid #334155", borderRadius: 10, marginTop: 4, maxHeight: 240, overflowY: "auto", position: "absolute", zIndex: 10, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+              <div style={{ background: "#1E293B", border: "1.5px solid #334155", borderRadius: 10, marginTop: 4, maxHeight: 280, overflowY: "auto", position: "absolute", zIndex: 10, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
                 {filteredOS.length === 0 ? (
                   <div style={{ padding: 16, color: "#475569", fontSize: 13, textAlign: "center" }}>Sin resultados</div>
                 ) : filteredOS.map(o => (
@@ -491,12 +548,18 @@ export default function App() {
                       <div>
                         <span style={{ color: "#3B82F6", fontWeight: 700, fontSize: 13 }}>OS {o.os}</span>
                         <span style={{ color: "#64748B", fontSize: 11, marginLeft: 8 }}>{o.area}</span>
+                        {o.manual && <span style={{ color: "#F59E0B", fontSize: 10, marginLeft: 6, fontWeight: 700 }}>MANUAL</span>}
                       </div>
                     </div>
                     <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>{o.equipo}</div>
                     <div style={{ color: "#475569", fontSize: 11, marginTop: 1 }}>{o.marca} · {o.modelo}</div>
                   </button>
                 ))}
+                <button
+                  onClick={() => { setShowManualForm(true); setManualForm(f => ({ ...f, os: osSearch && /^\d+$/.test(osSearch) ? osSearch : "" })); }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "#1E3A5F40", border: "none", padding: "12px 14px", cursor: "pointer", color: "#60A5FA", fontSize: 13, fontWeight: 700 }}>
+                  + Crear orden de servicio manualmente
+                </button>
               </div>
             )}
           </div>
@@ -504,10 +567,15 @@ export default function App() {
           {/* Selected OS card */}
           {selectedOS && (
             <div style={{ background: "#1E3A5F30", border: "1px solid #2563EB40", borderRadius: 10, padding: 12, marginBottom: 18 }}>
-              <div style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700, marginBottom: 6 }}>EQUIPO SELECCIONADO</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700 }}>EQUIPO SELECCIONADO</div>
+                {selectedOS.manual && <div style={{ color: "#F59E0B", fontSize: 10, fontWeight: 700 }}>MANUAL</div>}
+              </div>
+              {selectedOS.unidadMedica && <div style={{ color: "#94A3B8", fontSize: 11, marginBottom: 4 }}>{selectedOS.unidadMedica}</div>}
               <div style={{ color: "#F1F5F9", fontSize: 14, fontWeight: 600 }}>{selectedOS.equipo}</div>
               <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>{selectedOS.marca} {selectedOS.modelo}</div>
               <div style={{ color: "#64748B", fontSize: 11, marginTop: 2 }}>Serie: {selectedOS.serie} · {selectedOS.area}</div>
+              {selectedOS.inventario && <div style={{ color: "#64748B", fontSize: 11, marginTop: 2 }}>Inventario: {selectedOS.inventario}</div>}
             </div>
           )}
 
@@ -534,8 +602,54 @@ export default function App() {
 
         {/* Footer */}
         <div style={{ textAlign: "center", padding: "12px 20px 30px", color: "#1E3A5F" }}>
-          <span style={{ fontSize: 11 }}>Hospital de Especialidades CMN Manuel Ávila Camacho · Puebla</span>
+          <span style={{ fontSize: 11 }}>Diseñado y Supervisado por: Ing. Víctor Martínez</span>
         </div>
+
+        {/* Modal: Crear orden manualmente */}
+        {showManualForm && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
+            <div style={{ background: "#0F172A", borderRadius: "16px 16px 0 0", padding: 20, width: "100%", maxWidth: 430, maxHeight: "88vh", overflowY: "auto", border: "1px solid #1E3A5F" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#F1F5F9" }}>Nueva orden de servicio</h2>
+                <button onClick={() => setShowManualForm(false)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                  <Icon name="close" size={18} color="#94A3B8" />
+                </button>
+              </div>
+
+              {[
+                { key: "os", label: "ORDEN DE SERVICIO (No.)", placeholder: "Ej. 999" },
+                { key: "unidadMedica", label: "UNIDAD MÉDICA", placeholder: "Ej. UMAE CMN Manuel Ávila Camacho" },
+                { key: "area", label: "ÁREA", placeholder: "Ej. Oftalmología" },
+                { key: "equipo", label: "EQUIPO", placeholder: "Ej. Lámpara de hendidura" },
+                { key: "marca", label: "MARCA", placeholder: "Ej. Carl Zeiss" },
+                { key: "modelo", label: "MODELO", placeholder: "Ej. Visulas 532s" },
+                { key: "serie", label: "SERIE", placeholder: "Ej. 865670" },
+                { key: "inventario", label: "INVENTARIO", placeholder: "Ej. INV-0001" },
+              ].map(field => (
+                <div key={field.key} style={{ marginBottom: 14 }}>
+                  <label style={S.label}>{field.label}</label>
+                  <input
+                    style={S.input}
+                    placeholder={field.placeholder}
+                    value={manualForm[field.key]}
+                    onChange={e => setManualForm(f => ({ ...f, [field.key]: e.target.value }))}
+                  />
+                </div>
+              ))}
+
+              <button
+                onClick={handleGuardarManual}
+                disabled={!manualFormValid}
+                style={{ ...S.btn, marginTop: 6, ...(manualFormValid ? {} : S.btnDisabled) }}
+              >
+                Guardar y seleccionar orden
+              </button>
+              <p style={{ color: "#475569", fontSize: 11, textAlign: "center", marginTop: 10 }}>
+                Los campos marcados son obligatorios: O.S., Unidad Médica, Área y Equipo
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -641,5 +755,3 @@ export default function App() {
     </div>
   );
 }
-
-
