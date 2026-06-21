@@ -1,6 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { saveReporte, getAllReportes } from "./db";
 import { useOnlineSync } from "./useOnlineSync";
+import { jsPDF } from "jspdf";
+
+// ── Acceso compartido (cámbialo aquí si lo necesitas) ─────────────────────────
+const APP_USERNAME = "ServicioTicsa";
+const APP_PASSWORD = "Ticsa2026";
+const AUTH_STORAGE_KEY = "ticsa_reportes_auth";
 
 // ── Data from real Excel ──────────────────────────────────────────────────────
 const ORDENES = [
@@ -116,6 +122,145 @@ function compressImage(dataUrl, maxWidth = 1600, quality = 0.75) {
     img.onerror = () => resolve(dataUrl); // si falla, usar original
     img.src = dataUrl;
   });
+}
+
+// ── Login compartido ────────────────────────────────────────────────────────
+function Login({ onSuccess }) {
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (user.trim() === APP_USERNAME && pass === APP_PASSWORD) {
+      if (remember) localStorage.setItem(AUTH_STORAGE_KEY, "true");
+      setError("");
+      onSuccess();
+    } else {
+      setError("Usuario o contraseña incorrectos");
+    }
+  };
+
+  const inputStyle = { width: "100%", background: "#1E293B", border: "1.5px solid #334155", borderRadius: 10, padding: "13px 14px", color: "#F1F5F9", fontSize: 15, outline: "none", boxSizing: "border-box" };
+
+  return (
+    <div style={{ background: "#0A0F1E", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: 360, background: "#0F172A", border: "1px solid #1E3A5F", borderRadius: 16, padding: 28 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 22 }}>
+          <img src="/logo.png" alt="Logo" style={{ width: 56, height: 56, borderRadius: 10, objectFit: "contain", background: "#fff", marginBottom: 12 }} />
+          <div style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em" }}>TECNOLOGÍA INDUSTRIAL CIENTÍFICA</div>
+          <h1 style={{ color: "#F1F5F9", fontSize: 18, fontWeight: 800, margin: "6px 0 0" }}>Reportes Fotográficos</h1>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", color: "#94A3B8", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 6 }}>USUARIO</label>
+          <input style={inputStyle} value={user} onChange={e => setUser(e.target.value)} autoCapitalize="none" autoCorrect="off" />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", color: "#94A3B8", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 6 }}>CONTRASEÑA</label>
+          <input style={inputStyle} type="password" value={pass} onChange={e => setPass(e.target.value)} />
+        </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, cursor: "pointer" }}>
+          <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} style={{ width: 16, height: 16 }} />
+          <span style={{ color: "#94A3B8", fontSize: 13 }}>Recordar en este dispositivo</span>
+        </label>
+
+        {error && (
+          <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 8, padding: "8px 12px", marginBottom: 14, color: "#EF4444", fontSize: 12, textAlign: "center" }}>
+            {error}
+          </div>
+        )}
+
+        <button type="submit" style={{ display: "block", width: "100%", padding: 14, background: "linear-gradient(135deg,#2563EB,#1D4ED8)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          Ingresar
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ── Firma digital (canvas) ───────────────────────────────────────────────────
+function SignaturePad({ onChange }) {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const hasSignature = useRef(false);
+
+  const getCtx = () => canvasRef.current.getContext("2d");
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    const ctx = getCtx();
+    ctx.scale(ratio, ratio);
+    ctx.strokeStyle = "#F1F5F9";
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, []);
+
+  const getPos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const point = e.touches ? e.touches[0] : e;
+    return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+  };
+
+  const start = (e) => {
+    e.preventDefault();
+    drawing.current = true;
+    const { x, y } = getPos(e);
+    const ctx = getCtx();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const move = (e) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const { x, y } = getPos(e);
+    const ctx = getCtx();
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    hasSignature.current = true;
+  };
+
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (hasSignature.current) onChange(canvasRef.current.toDataURL("image/png"));
+  };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    const ctx = getCtx();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasSignature.current = false;
+    onChange(null);
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#fff", borderRadius: 10, border: "1.5px solid #334155", overflow: "hidden" }}>
+        <canvas
+          ref={canvasRef}
+          style={{ width: "100%", height: 140, display: "block", touchAction: "none" }}
+          onMouseDown={start}
+          onMouseMove={move}
+          onMouseUp={end}
+          onMouseLeave={end}
+          onTouchStart={start}
+          onTouchMove={move}
+          onTouchEnd={end}
+        />
+      </div>
+      <button type="button" onClick={clear} style={{ marginTop: 8, background: "none", border: "1.5px solid #334155", borderRadius: 8, padding: "6px 12px", color: "#94A3B8", cursor: "pointer", fontSize: 12 }}>
+        Borrar firma
+      </button>
+    </div>
+  );
 }
 
 // ── Photo Slot ────────────────────────────────────────────────────────────────
@@ -257,11 +402,171 @@ function ProgressBar({ photos }) {
   );
 }
 
+// ── Generación de PDF ───────────────────────────────────────────────────────
+function loadImageDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function hexToRgb(hex) {
+  const m = hex.replace("#", "");
+  return [parseInt(m.substring(0, 2), 16), parseInt(m.substring(2, 4), 16), parseInt(m.substring(4, 6), 16)];
+}
+
+async function buildReportePdf({ ingeniero, tipo, os, folio, fecha, hora, estadoEquipo, observaciones, firmaDataUrl, photos }) {
+  const PAGE_W = 215.9, PAGE_H = 279.4, MARGIN = 14;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+  const doc = new jsPDF({ unit: "mm", format: "letter" });
+  let y = MARGIN;
+
+  const ensureSpace = (needed) => {
+    if (y + needed > PAGE_H - 22) { doc.addPage(); y = MARGIN; }
+  };
+
+  let logoDataUrl = null;
+  try { logoDataUrl = await loadImageDataUrl("/logo.png"); } catch { /* sin logo disponible */ }
+
+  // Encabezado
+  if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", MARGIN, y, 16, 16);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(20, 30, 50);
+  doc.text("TECNOLOGÍA INDUSTRIAL CIENTÍFICA", MARGIN + 20, y + 6);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(90, 100, 120);
+  doc.text("Servicio técnico especializado en equipo biomédico", MARGIN + 20, y + 11.5);
+  y += 22;
+  doc.setDrawColor(200, 205, 215); doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+  y += 8;
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(15, 23, 42);
+  doc.text("REPORTE FOTOGRÁFICO DE MANTENIMIENTO", MARGIN, y);
+  y += 7;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(70, 80, 100);
+  doc.text(`Folio: ${folio}`, MARGIN, y);
+  doc.text(`Fecha: ${fecha}   Hora de generación: ${hora}`, PAGE_W - MARGIN, y, { align: "right" });
+  y += 10;
+
+  // Datos del servicio
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(40, 50, 70);
+  doc.text("DATOS DEL SERVICIO", MARGIN, y);
+  y += 5;
+  const campos = [
+    ["O.S.", os.os], ["Tipo de mantenimiento", tipo],
+    ["Equipo", os.equipo], ["Marca", os.marca || "—"],
+    ["Modelo", os.modelo || "—"], ["Inventario", os.inventario || "—"],
+    ["N° Serie", os.serie || "—"], ["Área", os.area],
+    ["Ingeniero", ingeniero],
+  ];
+  const colW = CONTENT_W / 2;
+  campos.forEach(([label, val], i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = MARGIN + col * colW, rowY = y + row * 9;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(110, 120, 140);
+    doc.text(label.toUpperCase(), x, rowY);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(20, 30, 50);
+    doc.text(String(val), x, rowY + 4.5, { maxWidth: colW - 4 });
+  });
+  y += Math.ceil(campos.length / 2) * 9 + 8;
+  doc.setDrawColor(220, 224, 232); doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+  y += 8;
+
+  // Fotografías por etapa
+  const photoW = (CONTENT_W - 6) / 2;
+  const photoH = (photoW * 3) / 4;
+  for (const etapa of ETAPAS) {
+    const etapaPhotos = (photos[etapa.key] || []).filter(Boolean);
+    if (etapaPhotos.length === 0) continue;
+    ensureSpace(10 + photoH);
+    const [r, g, b] = hexToRgb(etapa.color);
+    doc.setFillColor(r, g, b); doc.rect(MARGIN, y, 2.5, 5, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(r, g, b);
+    doc.text(`FOTOGRAFÍAS ${etapa.label.toUpperCase()}`, MARGIN + 5, y + 4.5);
+    y += 9;
+    ensureSpace(photoH);
+    etapaPhotos.forEach((p, i) => {
+      const x = MARGIN + i * (photoW + 6);
+      doc.addImage(p.data, "JPEG", x, y, photoW, photoH);
+      doc.setDrawColor(220, 224, 232); doc.rect(x, y, photoW, photoH);
+    });
+    y += photoH + 9;
+  }
+
+  // Estado y observaciones
+  ensureSpace(20);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(40, 50, 70);
+  doc.text("ESTADO DEL EQUIPO", MARGIN, y);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(20, 30, 50);
+  doc.text(estadoEquipo, MARGIN + 44, y);
+  y += 8;
+
+  if (observaciones && observaciones.trim()) {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(40, 50, 70);
+    doc.text("OBSERVACIONES", MARGIN, y);
+    y += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(20, 30, 50);
+    const lines = doc.splitTextToSize(observaciones, CONTENT_W);
+    ensureSpace(lines.length * 5);
+    doc.text(lines, MARGIN, y);
+    y += lines.length * 5 + 6;
+  }
+
+  // Conformidad y firma
+  ensureSpace(55);
+  doc.setDrawColor(220, 224, 232); doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+  y += 8;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(40, 50, 70);
+  doc.text("CONFORMIDAD Y FIRMA", MARGIN, y);
+  y += 6;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(70, 80, 100);
+  const leyenda = "El suscrito Ingeniero certifica que ha revisado y está de acuerdo en que las fotografías anexadas al presente reporte son correctas y corresponden a la orden de servicio indicada.";
+  const leyendaLines = doc.splitTextToSize(leyenda, CONTENT_W);
+  doc.text(leyendaLines, MARGIN, y);
+  y += leyendaLines.length * 4.3 + 6;
+
+  if (firmaDataUrl) {
+    const firmaW = 65, firmaH = 26;
+    doc.setDrawColor(200, 205, 215); doc.rect(MARGIN, y, firmaW, firmaH);
+    doc.addImage(firmaDataUrl, "PNG", MARGIN + 2, y + 2, firmaW - 4, firmaH - 4);
+    y += firmaH + 4;
+  } else {
+    doc.setDrawColor(200, 205, 215); doc.line(MARGIN, y + 20, MARGIN + 65, y + 20);
+    y += 24;
+  }
+  doc.setFontSize(8.5); doc.setTextColor(90, 100, 120);
+  doc.text(`Nombre: ${ingeniero}`, MARGIN, y); y += 5;
+  doc.text(`Fecha: ${fecha}`, MARGIN, y);
+
+  // Pie de página
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(140, 148, 165);
+    doc.text("Tecnología Industrial Científica · Reporte Fotográfico de Mantenimiento", MARGIN, PAGE_H - 10);
+    doc.text(`Página ${p} de ${totalPages}`, PAGE_W - MARGIN, PAGE_H - 10, { align: "right" });
+  }
+
+  return doc.output("datauristring");
+}
+
 // ── Report View ───────────────────────────────────────────────────────────────
-function ReportView({ form, photos, os, onClose, onNuevoReporte }) {
+function ReportView({ form, photos, os, estadoEquipo, setEstadoEquipo, observaciones, setObservaciones, firmaDataUrl, setFirmaDataUrl, onClose, onNuevoReporte }) {
   const now = new Date();
   const fecha = now.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const hora = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const ESTADOS = [
+    { key: "Operativo", color: "#10B981" },
+    { key: "Requiere refacciones", color: "#F59E0B" },
+    { key: "Fuera de servicio", color: "#EF4444" },
+  ];
 
   return (
     <div style={{ background: "#0F172A", minHeight: "100vh", padding: "0 0 40px 0" }}>
@@ -324,63 +629,117 @@ function ReportView({ form, photos, os, onClose, onNuevoReporte }) {
           );
         })}
 
-        {/* Google Drive Sync Button */}
-        <DriveSync form={form} photos={photos} os={os} onNuevoReporte={onNuevoReporte} />
+        {/* Estado del equipo */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 8 }}>ESTADO DEL EQUIPO</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {ESTADOS.map(e => (
+              <button key={e.key} onClick={() => setEstadoEquipo(e.key)}
+                style={{ padding: "8px 14px", borderRadius: 8, border: `1.5px solid ${estadoEquipo === e.key ? e.color : "#334155"}`, background: estadoEquipo === e.key ? `${e.color}20` : "#1E293B", color: estadoEquipo === e.key ? e.color : "#64748B", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                {e.key}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Observaciones */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 8 }}>OBSERVACIONES (OPCIONAL)</div>
+          <textarea
+            value={observaciones}
+            onChange={e => setObservaciones(e.target.value)}
+            placeholder="Describe cualquier detalle adicional relevante..."
+            rows={3}
+            style={{ width: "100%", background: "#1E293B", border: "1.5px solid #334155", borderRadius: 10, padding: "12px 14px", color: "#F1F5F9", fontSize: 14, outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
+          />
+        </div>
+
+        {/* Firma */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: "#94A3B8", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 8 }}>FIRMA DEL INGENIERO</div>
+          <p style={{ color: "#64748B", fontSize: 11, margin: "0 0 10px" }}>
+            Al firmar, certifico que he revisado y estoy de acuerdo en que las fotografías anexadas a este reporte son correctas y corresponden a la orden de servicio indicada.
+          </p>
+          <SignaturePad onChange={setFirmaDataUrl} />
+        </div>
+
+        {/* Generar y guardar reporte */}
+        <GenerarReporte form={form} photos={photos} os={os} estadoEquipo={estadoEquipo} observaciones={observaciones} firmaDataUrl={firmaDataUrl} onNuevoReporte={onNuevoReporte} />
       </div>
     </div>
   );
 }
 
-function DriveSync({ form, photos, os, onNuevoReporte }) {
-  const [syncStatus, setSyncStatus] = useState("idle");
-  const [syncMessage, setSyncMessage] = useState("");
-  const [syncPercent, setSyncPercent] = useState(0);
+function GenerarReporte({ form, photos, os, estadoEquipo, observaciones, firmaDataUrl, onNuevoReporte }) {
+  const [status, setStatus] = useState("idle"); // idle | building | uploading | done | error
+  const [message, setMessage] = useState("");
+  const [percent, setPercent] = useState(0);
+  const [pdfDataUrl, setPdfDataUrl] = useState(null);
 
-  const handleSync = async () => {
+  const now = new Date();
+  const fecha = now.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const hora = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const folio = `RF-${now.getFullYear()}-${os.os}`;
+
+  const handleGenerar = async () => {
     try {
-      setSyncStatus("syncing");
-      setSyncMessage("Conectando con Google...");
-      setSyncPercent(0);
-      const { initGoogleAuth, requestAccessToken, uploadReporteToDrive } = await import("./googleDrive.js");
-      await initGoogleAuth();
-      const auth = await requestAccessToken();
-      if (!auth.success) throw new Error("No se pudo autenticar con Google");
-      setSyncMessage("Autenticado. Subiendo fotos...");
+      setStatus("building");
+      setMessage("Generando PDF del reporte...");
+      const pdf = await buildReportePdf({
+        ingeniero: form.ingeniero, tipo: form.tipo, os, folio, fecha, hora,
+        estadoEquipo, observaciones, firmaDataUrl, photos,
+      });
+      setPdfDataUrl(pdf);
+
+      setStatus("uploading");
+      const { uploadReporteToDrive } = await import("./googleDrive.js");
       await uploadReporteToDrive(
-        { os, ingeniero: form.ingeniero, tipo: form.tipo, photos },
-        ({ message, percent }) => { setSyncMessage(message); if (percent) setSyncPercent(percent); }
+        { os, ingeniero: form.ingeniero, tipo: form.tipo, photos, pdfDataUrl: pdf, folio },
+        ({ message, percent }) => { setMessage(message); if (percent) setPercent(percent); }
       );
-      setSyncStatus("done");
-      setSyncMessage("¡Fotos subidas a Google Drive!");
+      setStatus("done");
+      setMessage("¡Reporte generado y guardado en Drive!");
     } catch (err) {
-      setSyncStatus("error");
-      setSyncMessage("Error: " + err.message);
+      setStatus("error");
+      setMessage("Error: " + err.message);
     }
   };
 
-  if (syncStatus === "idle") return (
-    <button onClick={handleSync} style={{ display: "flex", width: "100%", padding: 15, background: "linear-gradient(135deg,#1a73e8,#1557b0)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
-      Subir a Google Drive
+  const handleDescargar = () => {
+    if (!pdfDataUrl) return;
+    const a = document.createElement("a");
+    a.href = pdfDataUrl;
+    a.download = `Reporte_${folio}.pdf`;
+    a.click();
+  };
+
+  if (status === "idle") return (
+    <button onClick={handleGenerar} disabled={!firmaDataUrl}
+      style={{ display: "flex", width: "100%", padding: 15, background: firmaDataUrl ? "linear-gradient(135deg,#059669,#047857)" : "#1E293B", color: firmaDataUrl ? "#fff" : "#475569", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: firmaDataUrl ? "pointer" : "not-allowed", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+      <Icon name="report" size={18} color={firmaDataUrl ? "#fff" : "#475569"} />
+      {firmaDataUrl ? "Generar y guardar reporte" : "Falta la firma del ingeniero"}
     </button>
   );
 
-  if (syncStatus === "syncing") return (
+  if (status === "building" || status === "uploading") return (
     <div style={{ background: "#1E3A5F30", border: "1px solid #2563EB40", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-      <div style={{ color: "#60A5FA", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{syncMessage}</div>
+      <div style={{ color: "#60A5FA", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{message}</div>
       <div style={{ background: "#1E293B", borderRadius: 8, height: 6, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${syncPercent}%`, background: "linear-gradient(90deg,#3B82F6,#6366F1)", borderRadius: 8, transition: "width 0.3s" }} />
+        <div style={{ height: "100%", width: `${status === "building" ? 8 : percent}%`, background: "linear-gradient(90deg,#3B82F6,#6366F1)", borderRadius: 8, transition: "width 0.3s" }} />
       </div>
-      <div style={{ color: "#475569", fontSize: 11, marginTop: 6, textAlign: "right" }}>{syncPercent}%</div>
     </div>
   );
 
-  if (syncStatus === "done") return (
+  if (status === "done") return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ background: "#10B98120", border: "1px solid #10B98140", borderRadius: 12, padding: 16, textAlign: "center", marginBottom: 12 }}>
-        <div style={{ color: "#10B981", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>✓ {syncMessage}</div>
-        <div style={{ color: "#94A3B8", fontSize: 12 }}>Google Drive → Reportes IMSS → OS-{os.os}</div>
+        <div style={{ color: "#10B981", fontSize: 15, fontWeight: 700, marginBottom: 4 }}>✓ {message}</div>
+        <div style={{ color: "#94A3B8", fontSize: 12 }}>Google Drive → Reportes IMSS → OS-{os.os} {os.equipo}</div>
+        <div style={{ color: "#64748B", fontSize: 11, marginTop: 2 }}>Folio {folio}</div>
       </div>
+      <button onClick={handleDescargar} style={{ display: "flex", width: "100%", padding: 13, background: "#1E293B", border: "1.5px solid #334155", color: "#94A3B8", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
+        Descargar copia en este dispositivo
+      </button>
       <button onClick={onNuevoReporte} style={{ display: "flex", width: "100%", padding: 15, background: "linear-gradient(135deg,#2563EB,#1D4ED8)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", alignItems: "center", justifyContent: "center", gap: 8 }}>
         + Nuevo Reporte
       </button>
@@ -389,14 +748,15 @@ function DriveSync({ form, photos, os, onNuevoReporte }) {
 
   return (
     <div style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-      <div style={{ color: "#EF4444", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{syncMessage}</div>
-      <button onClick={() => setSyncStatus("idle")} style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 8, padding: "6px 12px", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>Reintentar</button>
+      <div style={{ color: "#EF4444", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{message}</div>
+      <button onClick={() => setStatus("idle")} style={{ background: "#EF444420", border: "1px solid #EF444440", borderRadius: 8, padding: "6px 12px", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>Reintentar</button>
     </div>
   );
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(() => localStorage.getItem(AUTH_STORAGE_KEY) === "true");
   const [step, setStep] = useState("form"); // form | fotos | preview
   const [form, setForm] = useState({ ingeniero: "", os: "", tipo: "" });
   const [photos, setPhotos] = useState({ antes: [null, null], durante: [null, null], final: [null, null] });
@@ -407,6 +767,13 @@ export default function App() {
   const [ordenesManuales, setOrdenesManuales] = useState([]);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualForm, setManualForm] = useState({ os: "", unidadMedica: "", area: "", equipo: "", marca: "", modelo: "", serie: "", inventario: "" });
+  const [estadoEquipo, setEstadoEquipo] = useState("Operativo");
+  const [observaciones, setObservaciones] = useState("");
+  const [firmaDataUrl, setFirmaDataUrl] = useState(null);
+
+  if (!authenticated) {
+    return <Login onSuccess={() => setAuthenticated(true)} />;
+  }
 
   const todasLasOrdenes = [...ordenesManuales, ...ORDENES];
   const selectedOS = todasLasOrdenes.find(o => o.os === form.os);
@@ -454,6 +821,9 @@ export default function App() {
     setOsSearch("");
     setActiveEtapa("antes");
     setShowManualForm(false);
+    setEstadoEquipo("Operativo");
+    setObservaciones("");
+    setFirmaDataUrl(null);
   };
 
   const formValid = form.ingeniero.trim() && form.os && form.tipo;
@@ -480,7 +850,7 @@ export default function App() {
   if (step === "preview") {
     return (
       <div style={S.root}>
-        <ReportView form={form} photos={photos} os={selectedOS} onClose={() => setStep("fotos")} onNuevoReporte={handleNuevoReporte} />
+        <ReportView form={form} photos={photos} os={selectedOS} estadoEquipo={estadoEquipo} setEstadoEquipo={setEstadoEquipo} observaciones={observaciones} setObservaciones={setObservaciones} firmaDataUrl={firmaDataUrl} setFirmaDataUrl={setFirmaDataUrl} onClose={() => setStep("fotos")} onNuevoReporte={handleNuevoReporte} />
       </div>
     );
   }
