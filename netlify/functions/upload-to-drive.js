@@ -1,6 +1,17 @@
 const { google } = require('googleapis');
 const { Readable } = require('stream');
  
+function getAuthClient() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_OAUTH_CLIENT_ID,
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET
+  );
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
+  });
+  return oauth2Client;
+}
+ 
 async function findOrCreateFolder(drive, name, parentId) {
   const safeName = name.replace(/'/g, "\\'");
   const searchRes = await drive.files.list({
@@ -33,13 +44,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Faltan datos requeridos' }) };
     }
  
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      null,
-      (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/drive']
-    );
- 
+    const auth = getAuthClient();
     const drive = google.drive({ version: 'v3', auth });
     const rootId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID;
  
