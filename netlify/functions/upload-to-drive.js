@@ -12,21 +12,25 @@ function getAuthClient() {
   return oauth2Client;
 }
  
-async function findOrCreateFolder(drive, name, parentId) {
+async function findOrCreateFolder(drive, name, parentId = null) {
   const safeName = name.replace(/'/g, "\\'");
+  const parentQuery = parentId ? `'${parentId}' in parents and ` : "'root' in parents and ";
   const searchRes = await drive.files.list({
-    q: `'${parentId}' in parents and name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    q: `${parentQuery}name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id, name)',
+    spaces: 'drive',
   });
  
   if (searchRes.data.files.length > 0) return searchRes.data.files[0].id;
  
+  const metadata = {
+    name,
+    mimeType: 'application/vnd.google-apps.folder',
+    ...(parentId && { parents: [parentId] }),
+  };
+ 
   const folderRes = await drive.files.create({
-    resource: {
-      name,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentId],
-    },
+    resource: metadata,
     fields: 'id',
   });
   return folderRes.data.id;
@@ -46,12 +50,14 @@ exports.handler = async (event) => {
  
     const auth = getAuthClient();
     const drive = google.drive({ version: 'v3', auth });
-    const rootId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID;
+ 
+    // Carpeta raíz creada por la app
+    const rootFolderId = await findOrCreateFolder(drive, 'REPORTES FOTOGRÁFICOS');
  
     // Carpeta de la O.S. (ej. "OS-211 FOTOCOAGULADOR LASER")
-    const osFolderId = await findOrCreateFolder(drive, osFolderName, rootId);
+    const osFolderId = await findOrCreateFolder(drive, osFolderName, rootFolderId);
  
-    // Subcarpeta de etapa (Antes/Durante/Final) solo para fotos; el PDF va directo en la carpeta de la O.S.
+    // Subcarpeta de etapa (Antes/Durante/Final) solo para fotos
     const targetFolderId = subFolder
       ? await findOrCreateFolder(drive, subFolder, osFolderId)
       : osFolderId;
